@@ -1,33 +1,61 @@
-import axios from 'axios';
-import Cookies from 'js-cookie'; // Install: npm i js-cookie @types/js-cookie
+// lib/api.ts
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL;
 
-const api = axios.create({
-  baseURL: 'http://192.168.1.15:3001/api', // Sesuai dokumentasi
-  headers: {
+export async function fetchWithAuth(endpoint: string, options: RequestInit = {}) {
+  const token = localStorage.getItem('token');
+  
+  const headers = {
     'Content-Type': 'application/json',
-  },
-});
+    ...(token && { Authorization: `Bearer ${token}` }),
+    ...options.headers,
+  };
 
-// Interceptor: Tambahkan Token ke setiap request
-api.interceptors.request.use((config) => {
-  const token = Cookies.get('token');
+  const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+    ...options,
+    headers,
+  });
+
+  if (response.status === 401) {
+    // Token expired or invalid
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+    window.location.href = '/login';
+    throw new Error('Unauthorized');
+  }
+
+  if (!response.ok) {
+    const errorData = await response.json();
+    throw new Error(errorData.message || 'API request failed');
+  }
+
+  return response.json();
+}
+
+export async function uploadWithAuth(endpoint: string, formData: FormData) {
+  const token = localStorage.getItem('token');
+  
+  const headers: HeadersInit = {};
   if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
+    headers.Authorization = `Bearer ${token}`;
   }
-  return config;
-});
 
-// Interceptor: Handle 401 (Unauthorized)
-api.interceptors.response.use(
-  (response) => response,
-  (error) => {
-    if (error.response?.status === 401) {
-      Cookies.remove('token');
-      Cookies.remove('user_role');
-      window.location.href = '/login';
-    }
-    return Promise.reject(error);
+  const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+    method: 'POST',
+    headers,
+    body: formData,
+  });
+
+  if (response.status === 401) {
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+    window.location.href = '/login';
+    throw new Error('Unauthorized');
   }
-);
 
-export default api;
+  if (!response.ok) {
+    const errorData = await response.json();
+    throw new Error(errorData.message || 'Upload failed');
+  }
+
+  return response.json();
+}

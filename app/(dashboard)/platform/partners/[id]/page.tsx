@@ -1,12 +1,13 @@
 'use client';
+
 import { useEffect, useState } from 'react';
-import { useParams } from 'next/navigation';
-import api from '@/lib/api';
+import { useParams, useRouter } from 'next/navigation';
+import { fetchWithAuth } from '@/lib/api';
 import { Partner, PartnerSubscription, License, SubscriptionPlan } from '@/types';
-import Modal from '@/components/ui/Modal';
 
 export default function PartnerDetailPage() {
   const params = useParams();
+  const router = useRouter();
   const partnerId = params.id as string;
 
   // State Data
@@ -14,12 +15,13 @@ export default function PartnerDetailPage() {
   const [subscriptions, setSubscriptions] = useState<PartnerSubscription[]>([]);
   const [licenses, setLicenses] = useState<License[]>([]);
   const [availablePlans, setAvailablePlans] = useState<SubscriptionPlan[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   
   // State Modal
   const [isSubModalOpen, setIsSubModalOpen] = useState(false);
   const [subForm, setSubForm] = useState({
     plan_id: '',
-    start_date: new Date().toISOString().split('T')[0], // Default hari ini
+    start_date: new Date().toISOString().split('T')[0],
     payment_status: 'Paid'
   });
 
@@ -27,32 +29,52 @@ export default function PartnerDetailPage() {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        // 1. Get Partner Data (Kita filter dari list all partner karena endpoint specific by ID tidak dirinci di docs utama, 
-        //    tapi biasanya ada GET /partner/:id. Jika tidak, kita pakai GET /partner lalu find).
-        //    Untuk efisiensi, asumsi GET /partner me-return array, kita cari manual:
-        const resPartner = await api.get('/partner');
-        const found = resPartner.data.find((p: Partner) => p.partner_id === partnerId);
-        setPartner(found || null);
+        setIsLoading(true);
+        
+        // 1. Get Partner Data
+        const allPartnersData = await fetchWithAuth('/partner');
+        const allPartners = Array.isArray(allPartnersData) ? allPartnersData : [];
+        const foundPartner = allPartners.find((p: Partner) => p.partner_id === partnerId);
+        
+        if (!foundPartner) {
+          alert('Mitra tidak ditemukan');
+          router.push('/dashboard/platform/partners');
+          return;
+        }
+        setPartner(foundPartner);
 
         // 2. Get Subscriptions History
-        const resSubs = await api.get(`/partner-subscription/partner/${partnerId}`);
-        setSubscriptions(resSubs.data);
+        try {
+          const subsData = await fetchWithAuth(`/partner-subscription/partner/${partnerId}`);
+          setSubscriptions(Array.isArray(subsData) ? subsData : []);
+        } catch (error) {
+          console.log('No subscriptions found');
+          setSubscriptions([]);
+        }
 
         // 3. Get Licenses
-        const resLicenses = await api.get(`/license/partner/${partnerId}`);
-        setLicenses(resLicenses.data);
+        try {
+          const licensesData = await fetchWithAuth(`/license/partner/${partnerId}`);
+          setLicenses(Array.isArray(licensesData) ? licensesData : []);
+        } catch (error) {
+          console.log('No licenses found');
+          setLicenses([]);
+        }
 
-        // 4. Get Available Plans (untuk dropdown form)
-        const resPlans = await api.get('/subscription-plan');
-        setAvailablePlans(resPlans.data);
+        // 4. Get Available Plans
+        const plansData = await fetchWithAuth('/subscription-plan');
+        setAvailablePlans(Array.isArray(plansData) ? plansData : []);
 
       } catch (error) {
-        console.error("Error fetching partner details", error);
+        console.error('Error fetching partner details:', error);
+        alert('Gagal memuat data partner');
+      } finally {
+        setIsLoading(false);
       }
     };
 
     if (partnerId) fetchData();
-  }, [partnerId]);
+  }, [partnerId, router]);
 
   // Handle Submit Subscription Baru
   const handleAddSubscription = async (e: React.FormEvent) => {
@@ -65,157 +87,338 @@ export default function PartnerDetailPage() {
         payment_status: subForm.payment_status
       };
 
-      await api.post('/partner-subscription', payload);
+      await fetchWithAuth('/partner-subscription', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      });
+      
       alert('Paket langganan berhasil ditambahkan!');
       setIsSubModalOpen(false);
       
-      // Refresh list
-      const resSubs = await api.get(`/partner-subscription/partner/${partnerId}`);
-      setSubscriptions(resSubs.data);
+      // Refresh subscription list
+      try {
+        const subsData = await fetchWithAuth(`/partner-subscription/partner/${partnerId}`);
+        setSubscriptions(Array.isArray(subsData) ? subsData : []);
+      } catch (error) {
+        setSubscriptions([]);
+      }
+
+      // Reset form
+      setSubForm({
+        plan_id: '',
+        start_date: new Date().toISOString().split('T')[0],
+        payment_status: 'Paid'
+      });
+      
     } catch (error: any) {
-      alert(error.response?.data?.message || 'Gagal menambahkan langganan');
+      alert(error.message || 'Gagal menambahkan langganan');
     }
   };
 
-  if (!partner) return <div className="p-6">Loading...</div>;
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <div className="w-16 h-16 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-gray-600">Memuat data partner...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!partner) {
+    return (
+      <div className="p-6">
+        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
+          Partner tidak ditemukan
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="space-y-6">
+      {/* Back Button */}
+      <button
+        onClick={() => router.push('/dashboard/platform/partners')}
+        className="text-indigo-600 hover:text-indigo-800 font-medium flex items-center space-x-2"
+      >
+        <span>←</span>
+        <span>Kembali ke Daftar Mitra</span>
+      </button>
+
       {/* Header Detail */}
-      <div className="bg-white p-6 rounded shadow">
-        <h1 className="text-2xl font-bold mb-2">{partner.business_name}</h1>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm text-gray-600">
-           <p>📧 {partner.business_email}</p>
-           <p>📞 {partner.business_phone}</p>
-           <p>Status: <span className="font-bold">{partner.status}</span></p>
+      <div className="bg-white p-6 rounded-xl shadow-sm border">
+        <div className="flex justify-between items-start mb-4">
+          <div>
+            <h1 className="text-3xl font-bold text-gray-800 mb-2">{partner.business_name}</h1>
+            <div className="flex items-center space-x-2">
+              <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
+                partner.status === 'Active' 
+                  ? 'bg-green-100 text-green-800' 
+                  : 'bg-red-100 text-red-800'
+              }`}>
+                {partner.status}
+              </span>
+            </div>
+          </div>
+        </div>
+        
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="flex items-center space-x-3">
+            <span className="text-2xl">📧</span>
+            <div>
+              <p className="text-xs text-gray-500">Email</p>
+              <p className="font-medium text-gray-800">{partner.business_email}</p>
+            </div>
+          </div>
+          <div className="flex items-center space-x-3">
+            <span className="text-2xl">📞</span>
+            <div>
+              <p className="text-xs text-gray-500">Telepon</p>
+              <p className="font-medium text-gray-800">{partner.business_phone}</p>
+            </div>
+          </div>
+          <div className="flex items-center space-x-3">
+            <span className="text-2xl">📅</span>
+            <div>
+              <p className="text-xs text-gray-500">Bergabung</p>
+              <p className="font-medium text-gray-800">
+                {new Date(partner.joined_date).toLocaleDateString('id-ID', {
+                  day: 'numeric',
+                  month: 'long',
+                  year: 'numeric'
+                })}
+              </p>
+            </div>
+          </div>
         </div>
       </div>
 
       {/* Section Langganan */}
-      <div className="bg-white p-6 rounded shadow">
-        <div className="flex justify-between items-center mb-4">
-          <h2 className="text-xl font-bold">Riwayat Langganan</h2>
+      <div className="bg-white p-6 rounded-xl shadow-sm border">
+        <div className="flex justify-between items-center mb-6">
+          <h2 className="text-2xl font-bold text-gray-800">Riwayat Langganan</h2>
           <button 
             onClick={() => setIsSubModalOpen(true)}
-            className="bg-blue-600 text-white px-3 py-1 rounded text-sm hover:bg-blue-700"
+            className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition font-semibold"
           >
             + Tetapkan Paket Baru
           </button>
         </div>
+        
         <div className="overflow-x-auto">
-          <table className="min-w-full text-sm text-left">
-            <thead className="bg-gray-50 text-gray-500">
+          <table className="min-w-full divide-y divide-gray-200">
+            <thead className="bg-gray-50">
               <tr>
-                <th className="px-4 py-2">Nama Paket</th>
-                <th className="px-4 py-2">Mulai</th>
-                <th className="px-4 py-2">Selesai</th>
-                <th className="px-4 py-2">Pembayaran</th>
-                <th className="px-4 py-2">Status</th>
+                <th className="px-6 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">
+                  Nama Paket
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">
+                  Tanggal Mulai
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">
+                  Tanggal Selesai
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">
+                  Pembayaran
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">
+                  Status
+                </th>
               </tr>
             </thead>
-            <tbody className="divide-y">
-              {subscriptions.map((sub, idx) => (
-                <tr key={idx}>
-                  <td className="px-4 py-2 font-medium">
-                    {sub.plan_snapshot?.plan_name || sub.plan_id}
-                  </td>
-                  <td className="px-4 py-2">{new Date(sub.start_date).toLocaleDateString('id-ID')}</td>
-                  <td className="px-4 py-2">{new Date(sub.end_date).toLocaleDateString('id-ID')}</td>
-                  <td className="px-4 py-2">{sub.payment_status}</td>
-                  <td className="px-4 py-2">
-                    <span className={`px-2 py-1 rounded text-xs ${sub.status === 'Active' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'}`}>
-                      {sub.status}
-                    </span>
+            <tbody className="bg-white divide-y divide-gray-200">
+              {subscriptions.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="px-6 py-8 text-center text-gray-500">
+                    Belum ada riwayat langganan
                   </td>
                 </tr>
-              ))}
-              {subscriptions.length === 0 && <tr><td colSpan={5} className="p-4 text-center text-gray-500">Belum ada data langganan</td></tr>}
+              ) : (
+                subscriptions.map((sub) => (
+                  <tr key={sub.subscription_id} className="hover:bg-gray-50 transition">
+                    <td className="px-6 py-4 whitespace-nowrap font-medium text-gray-900">
+                      {sub.plan_snapshot?.plan_name || `Paket #${sub.plan_id}`}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                      {new Date(sub.start_date).toLocaleDateString('id-ID')}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                      {new Date(sub.end_date).toLocaleDateString('id-ID')}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
+                        sub.payment_status === 'Paid' 
+                          ? 'bg-green-100 text-green-800' 
+                          : 'bg-yellow-100 text-yellow-800'
+                      }`}>
+                        {sub.payment_status}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
+                        sub.status === 'Active' 
+                          ? 'bg-blue-100 text-blue-800' 
+                          : 'bg-gray-100 text-gray-600'
+                      }`}>
+                        {sub.status}
+                      </span>
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>
       </div>
 
       {/* Section Lisensi */}
-      <div className="bg-white p-6 rounded shadow">
-        <h2 className="text-xl font-bold mb-4">Pemantauan Lisensi Perangkat</h2>
+      <div className="bg-white p-6 rounded-xl shadow-sm border">
+        <h2 className="text-2xl font-bold text-gray-800 mb-6">Pemantauan Lisensi Perangkat</h2>
+        
         <div className="overflow-x-auto">
-          <table className="min-w-full text-sm text-left border">
-            <thead className="bg-gray-50 text-gray-500">
+          <table className="min-w-full divide-y divide-gray-200">
+            <thead className="bg-gray-50">
               <tr>
-                <th className="px-4 py-2">Kode Aktivasi</th>
-                <th className="px-4 py-2">Device Name</th>
-                <th className="px-4 py-2">Cabang</th>
-                <th className="px-4 py-2">Status</th>
+                <th className="px-6 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">
+                  Kode Aktivasi
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">
+                  Device ID
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">
+                  Device Name
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">
+                  Cabang
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">
+                  Status
+                </th>
               </tr>
             </thead>
-            <tbody className="divide-y">
-              {licenses.map((lic) => (
-                <tr key={lic.license_id}>
-                  <td className="px-4 py-2 font-mono">{lic.activation_code}</td>
-                  <td className="px-4 py-2">{lic.device_name || '-'}</td>
-                  <td className="px-4 py-2">{lic.branch?.branch_name || '-'}</td>
-                  <td className="px-4 py-2">
-                    <span className={`px-2 py-0.5 rounded text-xs ${
-                      lic.license_status === 'Active' ? 'bg-green-100 text-green-800' : 
-                      lic.license_status === 'Assigned' ? 'bg-blue-100 text-blue-800' : 
-                      'bg-yellow-100 text-yellow-800'
-                    }`}>
-                      {lic.license_status}
-                    </span>
+            <tbody className="bg-white divide-y divide-gray-200">
+              {licenses.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="px-6 py-8 text-center text-gray-500">
+                    Belum ada lisensi perangkat
                   </td>
                 </tr>
-              ))}
-              {licenses.length === 0 && <tr><td colSpan={4} className="p-4 text-center text-gray-500">Belum ada lisensi</td></tr>}
+              ) : (
+                licenses.map((lic) => (
+                  <tr key={lic.license_id} className="hover:bg-gray-50 transition">
+                    <td className="px-6 py-4 whitespace-nowrap font-mono text-sm text-gray-900">
+                      {lic.activation_code}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                      {lic.device_id || '-'}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      {lic.device_name || '-'}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                      {lic.branch?.branch_name || '-'}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
+                        lic.license_status === 'Active' 
+                          ? 'bg-green-100 text-green-800' 
+                          : lic.license_status === 'Assigned' 
+                          ? 'bg-blue-100 text-blue-800' 
+                          : 'bg-yellow-100 text-yellow-800'
+                      }`}>
+                        {lic.license_status}
+                      </span>
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>
       </div>
 
       {/* Modal Tambah Subscription */}
-      <Modal isOpen={isSubModalOpen} onClose={() => setIsSubModalOpen(false)} title="Tetapkan Paket Langganan">
-        <form onSubmit={handleAddSubscription} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium">Pilih Paket</label>
-            <select 
-              required 
-              className="w-full border p-2 rounded bg-white"
-              value={subForm.plan_id}
-              onChange={(e) => setSubForm({...subForm, plan_id: e.target.value})}
-            >
-              <option value="">-- Pilih Paket --</option>
-              {availablePlans.map(plan => (
-                <option key={plan.id || plan.plan_id} value={plan.id || plan.plan_id}>
-                  {plan.plan_name} - Rp {plan.price.toLocaleString()} ({plan.duration_months} bln)
-                </option>
-              ))}
-            </select>
+      {isSubModalOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-white border-b px-6 py-4 flex justify-between items-center rounded-t-xl">
+              <h2 className="text-xl font-bold text-gray-800">Tetapkan Paket Langganan</h2>
+              <button 
+                onClick={() => setIsSubModalOpen(false)}
+                className="text-gray-400 hover:text-gray-600 transition text-2xl"
+              >
+                ×
+              </button>
+            </div>
+            
+            <form onSubmit={handleAddSubscription} className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Pilih Paket <span className="text-red-500">*</span>
+                </label>
+                <select 
+                  required 
+                  className="w-full border border-gray-300 p-3 rounded-lg bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
+                  value={subForm.plan_id}
+                  onChange={(e) => setSubForm({...subForm, plan_id: e.target.value})}
+                >
+                  <option value="">-- Pilih Paket --</option>
+                  {availablePlans.map(plan => (
+                    <option key={plan.plan_id} value={plan.plan_id}>
+                      {plan.plan_name} - Rp {plan.price.toLocaleString('id-ID')} ({plan.duration_months} bulan)
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Tanggal Mulai <span className="text-red-500">*</span>
+                </label>
+                <input 
+                  type="date" 
+                  required 
+                  value={subForm.start_date}
+                  onChange={(e) => setSubForm({...subForm, start_date: e.target.value})}
+                  className="w-full border border-gray-300 p-3 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition" 
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Status Pembayaran <span className="text-red-500">*</span>
+                </label>
+                <select 
+                  value={subForm.payment_status}
+                  onChange={(e) => setSubForm({...subForm, payment_status: e.target.value})}
+                  className="w-full border border-gray-300 p-3 rounded-lg bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
+                >
+                  <option value="Paid">Paid (Lunas)</option>
+                  <option value="Pending">Pending</option>
+                </select>
+              </div>
+
+              <div className="flex space-x-3 pt-4">
+                <button 
+                  type="button"
+                  onClick={() => setIsSubModalOpen(false)}
+                  className="flex-1 px-4 py-3 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition font-semibold"
+                >
+                  Batal
+                </button>
+                <button 
+                  type="submit" 
+                  className="flex-1 px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition font-semibold shadow-md"
+                >
+                  Simpan Transaksi
+                </button>
+              </div>
+            </form>
           </div>
-          <div>
-            <label className="block text-sm font-medium">Tanggal Mulai</label>
-            <input 
-              type="date" 
-              required 
-              value={subForm.start_date}
-              onChange={(e) => setSubForm({...subForm, start_date: e.target.value})}
-              className="w-full border p-2 rounded" 
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium">Status Pembayaran</label>
-            <select 
-              value={subForm.payment_status}
-              onChange={(e) => setSubForm({...subForm, payment_status: e.target.value})}
-              className="w-full border p-2 rounded bg-white"
-            >
-              <option value="Paid">Paid (Lunas)</option>
-              <option value="Pending">Pending</option>
-            </select>
-          </div>
-          <button type="submit" className="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700">
-            Simpan Transaksi
-          </button>
-        </form>
-      </Modal>
+        </div>
+      )}
     </div>
   );
 }

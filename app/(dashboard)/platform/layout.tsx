@@ -1,36 +1,102 @@
-import Link from 'next/link';
+'use client';
+
+import { useAuth } from '@/context/AuthContext';
+import { useRouter } from 'next/navigation';
+import { useEffect, useState } from 'react';
+import Sidebar from '@/components/ui/Sidebar';
 
 export default function PlatformLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const { user, logout, isLoading } = useAuth();
+  const router = useRouter();
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (mounted && !isLoading) {
+      if (!user) {
+        router.replace('/login');
+      } else if (user.role !== 'admin_platform') {
+        switch (user.role) {
+          case 'super_admin':
+            router.replace('/mitra');
+            break;
+          case 'branch_admin':
+            router.replace('/branch');
+            break;
+          default:
+            router.replace('/login');
+        }
+      }
+    }
+  }, [user, isLoading, router, mounted]);
+
+  if (!mounted || isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <div className="w-16 h-16 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-gray-600">Memuat...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!user || user.role !== 'admin_platform') {
+    return null;
+  }
+
+  // Definisikan menu items dengan path gambar Anda
+  const menuItems = [
+    { 
+      href: '/platform', 
+      name: 'Dashboard', 
+      iconSrc: '/images/icons/dashboard.png' // Ganti dengan path gambar Anda
+    },
+    { 
+      href: '/platform/partners', 
+      name: 'Mitra', 
+      iconSrc: '/images/icons/branchadmin.png' // Ganti dengan path gambar Anda
+    },
+    { 
+      href: '/platform/subscription-plans', 
+      name: 'Paket Langganan', 
+      iconSrc: '/images/icons/branch.png' // Ganti dengan path gambar Anda
+    },
+    { 
+      href: '/platform/subscriptions', 
+      name: 'Langganan Mitra', 
+      iconSrc: '/images/icons/catalog.png' // Ganti dengan path gambar Anda
+    },
+    { 
+      href: '/platform/licenses', 
+      name: 'Lisensi', 
+      iconSrc: '/images/icons/licenses.png' // Ganti dengan path gambar Anda
+    },
+  ];
+
   return (
-    <div className="flex h-screen bg-gray-100">
-      {/* Sidebar Platform - Warna Gelap */}
-      <aside className="w-64 bg-gray-900 text-white flex flex-col">
-        <div className="p-6 text-xl font-bold border-b border-gray-800">
-          Horeka Admin
-        </div>
-        <nav className="flex-1 p-4 space-y-2">
-          <Link href="/platform" className="block px-4 py-2 rounded hover:bg-gray-800">
-            Dashboard
-          </Link>
-          <Link href="/platform/subscriptions" className="block px-4 py-2 rounded hover:bg-gray-800">
-            Paket Langganan
-          </Link>
-          <Link href="/platform/partners" className="block px-4 py-2 rounded hover:bg-gray-800">
-            Daftar Mitra
-          </Link>
-        </nav>
-        <div className="p-4 border-t border-gray-800">
-          <span className="text-xs text-gray-500">Platform Level (L3)</span>
-        </div>
-      </aside>
+    <div className="flex h-screen bg-gray-50 font-sans text-gray-900">
+      {/* Sidebar */}
+      <Sidebar
+        menuItems={menuItems}
+        title="Horeka POS+"
+        subtitle="Platform Admin"
+        logoSrc="/images/LOGO HOREKA (1).png" // Ganti dengan path logo Anda
+        onLogout={logout}
+      />
 
       {/* Main Content */}
-      <main className="flex-1 overflow-y-auto">
-        {children}
+      <main className="flex-1 p-10 overflow-y-auto h-full transition-all duration-300 ease-in-out ml-72">
+        <div className="w-full">
+          {children}
+        </div>
       </main>
     </div>
   );

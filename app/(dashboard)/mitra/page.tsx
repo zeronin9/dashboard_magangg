@@ -1,66 +1,91 @@
+// app/(dashboard)/dashboard/partner/page.tsx
 'use client';
-import { useEffect, useState } from 'react';
-import api from '@/lib/api';
-import { Branch } from '@/types';
-import { useAuth } from '@/context/AuthContext';
 
-export default function MitraDashboard() {
-  const { user, logout } = useAuth();
-  // Inisialisasi state sebagai array kosong
+import { useEffect, useState } from 'react';
+import { fetchWithAuth } from '@/lib/api';
+import { Branch, Product, License } from '@/types';
+
+export default function PartnerDashboard() {
   const [branches, setBranches] = useState<Branch[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [licenses, setLicenses] = useState<License[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    const fetchBranches = async () => {
-      try {
-        // PERBAIKAN: Tambahkan <Branch[]> di sini agar TypeScript tahu
-        // bahwa respon API adalah array dari object Branch.
-        const res = await api.get<Branch[]>('/branch');
-        
-        // Sekarang res.data sudah dikenali sebagai Branch[], jadi error hilang
-        setBranches(res.data);
-      } catch (error) {
-        console.error("Gagal mengambil data cabang:", error);
-      }
-    };
-    fetchBranches();
+    loadDashboardData();
   }, []);
 
+  const loadDashboardData = async () => {
+    try {
+      const [branchesData, productsData, licensesData] = await Promise.all([
+        fetchWithAuth('/branch'),
+        fetchWithAuth('/product'),
+        fetchWithAuth('/license'),
+      ]);
+      setBranches(branchesData);
+      setProducts(productsData);
+      setLicenses(licensesData);
+    } catch (error) {
+      console.error('Error loading dashboard data:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  if (isLoading) {
+    return <div>Loading...</div>;
+  }
+
+  const activeLicenses = licenses.filter((l) => l.license_status === 'Active').length;
+  const pendingLicenses = licenses.filter((l) => l.license_status === 'Pending').length;
+
   return (
-    <div className="p-6">
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold">Dashboard Mitra (Pemilik)</h1>
-        <button onClick={logout} className="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600 transition">
-          Logout
-        </button>
+    <div className="space-y-6">
+      <h1 className="text-3xl font-bold text-gray-800">Dashboard Admin Mitra</h1>
+
+      {/* Stats Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+        <div className="bg-white p-6 rounded-xl shadow-sm border">
+          <h3 className="text-gray-500 text-sm font-medium">Total Cabang</h3>
+          <p className="text-3xl font-bold text-green-600 mt-2">{branches.length}</p>
+        </div>
+        <div className="bg-white p-6 rounded-xl shadow-sm border">
+          <h3 className="text-gray-500 text-sm font-medium">Total Produk</h3>
+          <p className="text-3xl font-bold text-blue-600 mt-2">{products.length}</p>
+        </div>
+        <div className="bg-white p-6 rounded-xl shadow-sm border">
+          <h3 className="text-gray-500 text-sm font-medium">Lisensi Aktif</h3>
+          <p className="text-3xl font-bold text-indigo-600 mt-2">{activeLicenses}</p>
+        </div>
+        <div className="bg-white p-6 rounded-xl shadow-sm border">
+          <h3 className="text-gray-500 text-sm font-medium">Lisensi Tersedia</h3>
+          <p className="text-3xl font-bold text-yellow-600 mt-2">{pendingLicenses}</p>
+        </div>
       </div>
 
-      <div className="bg-white rounded shadow overflow-hidden">
-        <table className="min-w-full">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Nama Cabang</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Alamat</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Telepon</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-200">
-            {branches.length > 0 ? (
-              branches.map((branch) => (
-                <tr key={branch.branch_id}>
-                  <td className="px-6 py-4 text-sm text-gray-900">{branch.branch_name}</td>
-                  <td className="px-6 py-4 text-sm text-gray-600">{branch.address}</td>
-                  <td className="px-6 py-4 text-sm text-gray-600">{branch.phone_number}</td>
-                </tr>
-              ))
-            ) : (
-              <tr>
-                <td colSpan={3} className="px-6 py-4 text-center text-sm text-gray-500">
-                  Belum ada data cabang.
-                </td>
+      {/* Branches List */}
+      <div className="bg-white p-6 rounded-xl shadow-sm border">
+        <h2 className="text-xl font-bold text-gray-800 mb-4">Daftar Cabang</h2>
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead>
+              <tr className="border-b">
+                <th className="text-left py-3 px-4 font-semibold text-gray-600">Nama Cabang</th>
+                <th className="text-left py-3 px-4 font-semibold text-gray-600">Alamat</th>
+                <th className="text-left py-3 px-4 font-semibold text-gray-600">Telepon</th>
               </tr>
-            )}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {branches.map((branch) => (
+                <tr key={branch.branch_id} className="border-b hover:bg-gray-50">
+                  <td className="py-3 px-4 font-medium">{branch.branch_name}</td>
+                  <td className="py-3 px-4">{branch.address}</td>
+                  <td className="py-3 px-4">{branch.phone_number}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );
