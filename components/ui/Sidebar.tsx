@@ -71,7 +71,7 @@ export default function Sidebar({
           )}
         </div>
         {isSidebarOpen && (
-          <ChevronLeft size={28} className="text-gray-400" />
+          <ChevronLeft size={28} className="text-white" />
         )}
       </div>
 
@@ -85,11 +85,11 @@ export default function Sidebar({
               href={item.href}
               className={`flex items-center w-full p-4 text-base font-medium rounded-xl transition-all duration-200 group ${
                 isActive
-                  ? "bg-blue-50 text-blue-600 shadow-sm"
+                  ? "bg-gray-100 text-black shadow-sm"
                   : "text-gray-500 hover:bg-gray-100 hover:text-gray-900"
               } ${isSidebarOpen ? "gap-4 justify-start" : "justify-center"}`}
             >
-              <div className="relative w-7 h-7 flex-shrink-0">
+              <div className="relative w-5 h-5 flex-shrink-0">
                 <Image 
                   src={item.iconSrc} 
                   alt={item.name} 

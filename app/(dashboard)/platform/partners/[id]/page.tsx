@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { fetchWithAuth } from '@/lib/api';
 import { Partner, PartnerSubscription, License, SubscriptionPlan } from '@/types';
+import { Edit2 } from 'lucide-react';
 
 export default function PartnerDetailPage() {
   const params = useParams();
@@ -15,9 +16,10 @@ export default function PartnerDetailPage() {
   const [subscriptions, setSubscriptions] = useState<PartnerSubscription[]>([]);
   const [licenses, setLicenses] = useState<License[]>([]);
   const [availablePlans, setAvailablePlans] = useState<SubscriptionPlan[]>([]);
+  const [allPlans, setAllPlans] = useState<SubscriptionPlan[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   
-  // State Modal
+  // State Modal Subscription
   const [isSubModalOpen, setIsSubModalOpen] = useState(false);
   const [subForm, setSubForm] = useState({
     plan_id: '',
@@ -25,49 +27,82 @@ export default function PartnerDetailPage() {
     payment_status: 'Paid'
   });
 
+  // State Modal Edit Partner
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [editForm, setEditForm] = useState({
+    business_name: '',
+    business_email: '',
+    business_phone: ''
+  });
+
+  // Helper function untuk mendapatkan nama plan
+  const getPlanName = (subscription: PartnerSubscription) => {
+    if (subscription.plan_snapshot?.plan_name) {
+      return subscription.plan_snapshot.plan_name;
+    }
+    const plan = allPlans.find(p => p.plan_id === subscription.plan_id);
+    if (plan) {
+      return plan.plan_name;
+    }
+    return 'Paket tidak tersedia';
+  };
+
+  const getPlanDetails = (subscription: PartnerSubscription) => {
+    if (subscription.plan_snapshot) {
+      return {
+        price: subscription.plan_snapshot.price,
+        duration: subscription.plan_snapshot.duration_months
+      };
+    }
+    const plan = allPlans.find(p => p.plan_id === subscription.plan_id);
+    if (plan) {
+      return {
+        price: plan.price,
+        duration: plan.duration_months
+      };
+    }
+    return { price: 0, duration: 0 };
+  };
+
   // Fetch Data Awal
   useEffect(() => {
     const fetchData = async () => {
       try {
         setIsLoading(true);
         
-        // 1. Get Partner Data
         const allPartnersData = await fetchWithAuth('/partner');
         const allPartners = Array.isArray(allPartnersData) ? allPartnersData : [];
         const foundPartner = allPartners.find((p: Partner) => p.partner_id === partnerId);
         
         if (!foundPartner) {
           alert('Mitra tidak ditemukan');
-          router.push('/dashboard/platform/partners');
+          router.push('/platform/partners');
           return;
         }
         setPartner(foundPartner);
 
-        // 2. Get Subscriptions History
+        const plansData = await fetchWithAuth('/subscription-plan');
+        const plans = Array.isArray(plansData) ? plansData : [];
+        setAvailablePlans(plans);
+        setAllPlans(plans);
+
         try {
           const subsData = await fetchWithAuth(`/partner-subscription/partner/${partnerId}`);
           setSubscriptions(Array.isArray(subsData) ? subsData : []);
         } catch (error) {
-          console.log('No subscriptions found');
           setSubscriptions([]);
         }
 
-        // 3. Get Licenses
         try {
           const licensesData = await fetchWithAuth(`/license/partner/${partnerId}`);
           setLicenses(Array.isArray(licensesData) ? licensesData : []);
         } catch (error) {
-          console.log('No licenses found');
           setLicenses([]);
         }
 
-        // 4. Get Available Plans
-        const plansData = await fetchWithAuth('/subscription-plan');
-        setAvailablePlans(Array.isArray(plansData) ? plansData : []);
-
       } catch (error) {
         console.error('Error fetching partner details:', error);
-        alert('Gagal memuat data partner');
+        alert('Gagal memuat data mitra');
       } finally {
         setIsLoading(false);
       }
@@ -95,7 +130,6 @@ export default function PartnerDetailPage() {
       alert('Paket langganan berhasil ditambahkan!');
       setIsSubModalOpen(false);
       
-      // Refresh subscription list
       try {
         const subsData = await fetchWithAuth(`/partner-subscription/partner/${partnerId}`);
         setSubscriptions(Array.isArray(subsData) ? subsData : []);
@@ -103,7 +137,6 @@ export default function PartnerDetailPage() {
         setSubscriptions([]);
       }
 
-      // Reset form
       setSubForm({
         plan_id: '',
         start_date: new Date().toISOString().split('T')[0],
@@ -115,12 +148,55 @@ export default function PartnerDetailPage() {
     }
   };
 
+  // Handle Open Edit Modal
+  const handleOpenEdit = () => {
+    if (partner) {
+      setEditForm({
+        business_name: partner.business_name,
+        business_email: partner.business_email,
+        business_phone: partner.business_phone
+      });
+      setIsEditModalOpen(true);
+    }
+  };
+
+  // Handle Submit Edit Partner
+  const handleEditPartner = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      const payload = {
+        business_name: editForm.business_name,
+        business_email: editForm.business_email,
+        business_phone: editForm.business_phone
+      };
+
+      await fetchWithAuth(`/partner/${partnerId}`, {
+        method: 'PUT',
+        body: JSON.stringify(payload),
+      });
+
+      alert('Data mitra berhasil diperbarui!');
+      setIsEditModalOpen(false);
+
+      // Refresh partner data
+      const allPartnersData = await fetchWithAuth('/partner');
+      const allPartners = Array.isArray(allPartnersData) ? allPartnersData : [];
+      const updatedPartner = allPartners.find((p: Partner) => p.partner_id === partnerId);
+      if (updatedPartner) {
+        setPartner(updatedPartner);
+      }
+
+    } catch (error: any) {
+      alert(error.message || 'Gagal memperbarui data mitra');
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="text-center">
           <div className="w-16 h-16 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-gray-600">Memuat data partner...</p>
+          <p className="text-gray-600">Memuat data mitra...</p>
         </div>
       </div>
     );
@@ -130,17 +206,17 @@ export default function PartnerDetailPage() {
     return (
       <div className="p-6">
         <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
-          Partner tidak ditemukan
+          Mitra tidak ditemukan
         </div>
       </div>
     );
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 pb-10">
       {/* Back Button */}
       <button
-        onClick={() => router.push('/dashboard/platform/partners')}
+        onClick={() => router.push('/platform/partners')}
         className="text-indigo-600 hover:text-indigo-800 font-medium flex items-center space-x-2"
       >
         <span>←</span>
@@ -158,10 +234,19 @@ export default function PartnerDetailPage() {
                   ? 'bg-green-100 text-green-800' 
                   : 'bg-red-100 text-red-800'
               }`}>
-                {partner.status}
+                {partner.status === 'Active' ? 'Aktif' : 'Ditangguhkan'}
               </span>
             </div>
           </div>
+          
+          {/* Edit Button */}
+          <button
+            onClick={handleOpenEdit}
+            className="bg-gray-100 text-gray-800 px-4 py-2 rounded-lg hover:bg-gray-200  transition font-semibold flex items-center gap-2 border border-gray-400"
+          >
+            <Edit2 size={16} />
+            Edit Data Mitra
+          </button>
         </div>
         
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -201,7 +286,7 @@ export default function PartnerDetailPage() {
           <h2 className="text-2xl font-bold text-gray-800">Riwayat Langganan</h2>
           <button 
             onClick={() => setIsSubModalOpen(true)}
-            className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition font-semibold"
+            className="bg-gray-100 text-gray-800 px-4 py-2 rounded-lg hover:bg-gray-200  transition font-semibold border border-gray-400"
           >
             + Tetapkan Paket Baru
           </button>
@@ -213,6 +298,9 @@ export default function PartnerDetailPage() {
               <tr>
                 <th className="px-6 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">
                   Nama Paket
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">
+                  Harga & Durasi
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">
                   Tanggal Mulai
@@ -231,42 +319,65 @@ export default function PartnerDetailPage() {
             <tbody className="bg-white divide-y divide-gray-200">
               {subscriptions.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-6 py-8 text-center text-gray-500">
+                  <td colSpan={6} className="px-6 py-8 text-center text-gray-500">
                     Belum ada riwayat langganan
                   </td>
                 </tr>
               ) : (
-                subscriptions.map((sub) => (
-                  <tr key={sub.subscription_id} className="hover:bg-gray-50 transition">
-                    <td className="px-6 py-4 whitespace-nowrap font-medium text-gray-900">
-                      {sub.plan_snapshot?.plan_name || `Paket #${sub.plan_id}`}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
-                      {new Date(sub.start_date).toLocaleDateString('id-ID')}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
-                      {new Date(sub.end_date).toLocaleDateString('id-ID')}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
-                        sub.payment_status === 'Paid' 
-                          ? 'bg-green-100 text-green-800' 
-                          : 'bg-yellow-100 text-yellow-800'
-                      }`}>
-                        {sub.payment_status}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
-                        sub.status === 'Active' 
-                          ? 'bg-blue-100 text-blue-800' 
-                          : 'bg-gray-100 text-gray-600'
-                      }`}>
-                        {sub.status}
-                      </span>
-                    </td>
-                  </tr>
-                ))
+                subscriptions.map((sub) => {
+                  const planDetails = getPlanDetails(sub);
+                  return (
+                    <tr key={sub.subscription_id} className="hover:bg-gray-50 transition">
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="font-bold text-gray-900">
+                          {getPlanName(sub)}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="text-sm">
+                          <div className="font-semibold text-gray-900">
+                            Rp {planDetails.price.toLocaleString('id-ID')}
+                          </div>
+                          <div className="text-xs text-gray-500">
+                            {planDetails.duration} bulan
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                        {new Date(sub.start_date).toLocaleDateString('id-ID', {
+                          day: 'numeric',
+                          month: 'short',
+                          year: 'numeric'
+                        })}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                        {new Date(sub.end_date).toLocaleDateString('id-ID', {
+                          day: 'numeric',
+                          month: 'short',
+                          year: 'numeric'
+                        })}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
+                          sub.payment_status === 'Paid' 
+                            ? 'bg-green-100 text-green-800' 
+                            : 'bg-yellow-100 text-yellow-800'
+                        }`}>
+                          {sub.payment_status === 'Paid' ? 'Lunas' : 'Menunggu'}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
+                          sub.status === 'Active' 
+                            ? 'bg-blue-100 text-blue-800' 
+                            : 'bg-gray-100 text-gray-600'
+                        }`}>
+                          {sub.status === 'Active' ? 'Aktif' : 'Tidak Aktif'}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>
@@ -285,10 +396,10 @@ export default function PartnerDetailPage() {
                   Kode Aktivasi
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">
-                  Device ID
+                  ID Perangkat
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">
-                  Device Name
+                  Nama Perangkat
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-bold text-gray-600 uppercase tracking-wider">
                   Cabang
@@ -308,13 +419,15 @@ export default function PartnerDetailPage() {
               ) : (
                 licenses.map((lic) => (
                   <tr key={lic.license_id} className="hover:bg-gray-50 transition">
-                    <td className="px-6 py-4 whitespace-nowrap font-mono text-sm text-gray-900">
-                      {lic.activation_code}
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className="font-mono text-sm font-semibold text-indigo-600 bg-indigo-50 px-3 py-1 rounded-lg">
+                        {lic.activation_code}
+                      </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
                       {lic.device_id || '-'}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                       {lic.device_name || '-'}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
@@ -328,7 +441,8 @@ export default function PartnerDetailPage() {
                           ? 'bg-blue-100 text-blue-800' 
                           : 'bg-yellow-100 text-yellow-800'
                       }`}>
-                        {lic.license_status}
+                        {lic.license_status === 'Active' ? 'Aktif' : 
+                         lic.license_status === 'Assigned' ? 'Dialokasikan' : 'Menunggu'}
                       </span>
                     </td>
                   </tr>
@@ -339,28 +453,111 @@ export default function PartnerDetailPage() {
         </div>
       </div>
 
-      {/* Modal Tambah Subscription */}
-      {isSubModalOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
-            <div className="sticky top-0 bg-white border-b px-6 py-4 flex justify-between items-center rounded-t-xl">
-              <h2 className="text-xl font-bold text-gray-800">Tetapkan Paket Langganan</h2>
+      {/* Modal Edit Partner */}
+      {isEditModalOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-white border-b px-8 py-6 flex justify-between items-center rounded-t-2xl">
+              <h2 className="text-2xl font-bold text-gray-800">Edit Data Mitra</h2>
               <button 
-                onClick={() => setIsSubModalOpen(false)}
-                className="text-gray-400 hover:text-gray-600 transition text-2xl"
+                onClick={() => setIsEditModalOpen(false)}
+                className="text-gray-400 hover:text-gray-600 transition text-3xl leading-none"
               >
                 ×
               </button>
             </div>
             
-            <form onSubmit={handleAddSubscription} className="p-6 space-y-4">
+            <form onSubmit={handleEditPartner} className="p-8 space-y-5">
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                <label className="block text-sm font-bold text-gray-700 mb-2">
+                  Nama Bisnis <span className="text-red-500">*</span>
+                </label>
+                <input 
+                  required 
+                  type="text"
+                  value={editForm.business_name}
+                  onChange={(e) => setEditForm({...editForm, business_name: e.target.value})}
+                  className="w-full border border-gray-300 p-4 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
+                  placeholder="Nama bisnis mitra"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-bold text-gray-700 mb-2">
+                  Email Bisnis <span className="text-red-500">*</span>
+                </label>
+                <input 
+                  required 
+                  type="email"
+                  value={editForm.business_email}
+                  onChange={(e) => setEditForm({...editForm, business_email: e.target.value})}
+                  className="w-full border border-gray-300 p-4 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
+                  placeholder="email@bisnis.com"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-bold text-gray-700 mb-2">
+                  Nomor Telepon <span className="text-red-500">*</span>
+                </label>
+                <input 
+                  required 
+                  type="text"
+                  value={editForm.business_phone}
+                  onChange={(e) => setEditForm({...editForm, business_phone: e.target.value})}
+                  className="w-full border border-gray-300 p-4 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
+                  placeholder="08123456789"
+                />
+              </div>
+
+              <div className="bg-blue-50 border border-blue-200 p-4 rounded-lg">
+                <p className="text-sm text-blue-800">
+                  <strong>Catatan:</strong> Perubahan data akan langsung diterapkan setelah disimpan.
+                </p>
+              </div>
+
+              <div className="flex space-x-3 pt-5">
+                <button 
+                  type="button"
+                  onClick={() => setIsEditModalOpen(false)}
+                  className="flex-1 px-6 py-4 bg-gray-100 text-gray-700 rounded-xl hover:bg-gray-200 transition font-bold border border-gray-400"
+                >
+                  Batal
+                </button>
+                <button 
+                  type="submit" 
+                  className="flex-1 px-6 py-4 bg-gray-100 text-gray-700 rounded-xl hover:bg-gray-200 transition font-bold border border-gray-400"
+                >
+                  Simpan Perubahan
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Tambah Subscription */}
+      {isSubModalOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-white border-b px-8 py-6 flex justify-between items-center rounded-t-2xl">
+              <h2 className="text-2xl font-bold text-gray-800">Tetapkan Paket Langganan</h2>
+              <button 
+                onClick={() => setIsSubModalOpen(false)}
+                className="text-gray-400 hover:text-gray-600 transition text-3xl leading-none"
+              >
+                ×
+              </button>
+            </div>
+            
+            <form onSubmit={handleAddSubscription} className="p-8 space-y-5">
+              <div>
+                <label className="block text-sm font-bold text-gray-700 mb-2">
                   Pilih Paket <span className="text-red-500">*</span>
                 </label>
                 <select 
                   required 
-                  className="w-full border border-gray-300 p-3 rounded-lg bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
+                  className="w-full border border-gray-300 p-4 rounded-xl bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
                   value={subForm.plan_id}
                   onChange={(e) => setSubForm({...subForm, plan_id: e.target.value})}
                 >
@@ -374,7 +571,7 @@ export default function PartnerDetailPage() {
               </div>
 
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                <label className="block text-sm font-bold text-gray-700 mb-2">
                   Tanggal Mulai <span className="text-red-500">*</span>
                 </label>
                 <input 
@@ -382,35 +579,41 @@ export default function PartnerDetailPage() {
                   required 
                   value={subForm.start_date}
                   onChange={(e) => setSubForm({...subForm, start_date: e.target.value})}
-                  className="w-full border border-gray-300 p-3 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition" 
+                  className="w-full border border-gray-300 p-4 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition" 
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                <label className="block text-sm font-bold text-gray-700 mb-2">
                   Status Pembayaran <span className="text-red-500">*</span>
                 </label>
                 <select 
                   value={subForm.payment_status}
                   onChange={(e) => setSubForm({...subForm, payment_status: e.target.value})}
-                  className="w-full border border-gray-300 p-3 rounded-lg bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
+                  className="w-full border border-gray-300 p-4 rounded-xl bg-white focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
                 >
-                  <option value="Paid">Paid (Lunas)</option>
-                  <option value="Pending">Pending</option>
+                  <option value="Paid">Lunas</option>
+                  <option value="Pending">Menunggu</option>
                 </select>
               </div>
 
-              <div className="flex space-x-3 pt-4">
+              <div className="bg-blue-50 border border-blue-200 p-4 rounded-lg">
+                <p className="text-sm text-blue-800">
+                  <strong>Catatan:</strong> Tanggal selesai akan dihitung otomatis berdasarkan durasi paket yang dipilih.
+                </p>
+              </div>
+
+              <div className="flex space-x-3 pt-5">
                 <button 
                   type="button"
                   onClick={() => setIsSubModalOpen(false)}
-                  className="flex-1 px-4 py-3 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition font-semibold"
+                  className="flex-1 px-6 py-4 bg-gray-100 text-gray-700 rounded-xl hover:bg-gray-200 transition font-bold border border-gray-400"
                 >
                   Batal
                 </button>
                 <button 
                   type="submit" 
-                  className="flex-1 px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition font-semibold shadow-md"
+                  className="flex-1 px-6 py-4 bg-gray-100 text-gray-700 rounded-xl hover:bg-gray-200 transition font-bold border border-gray-400"
                 >
                   Simpan Transaksi
                 </button>

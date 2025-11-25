@@ -4,10 +4,23 @@ import { useState, useEffect } from 'react';
 import { fetchWithAuth } from '@/lib/api';
 import Link from 'next/link';
 import { 
-  Store, ShoppingBag, TicketPercent, 
-  Smartphone, BarChart3, DollarSign, 
-  ArrowRight, Calendar, Loader2, AlertCircle, Users, Package
+  DollarSign, Loader2, AlertCircle, Calendar, TrendingUp
 } from 'lucide-react';
+import { Bar, BarChart, CartesianGrid, LabelList, XAxis, YAxis } from 'recharts';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card';
+import {
+  ChartConfig,
+  ChartContainer,
+  ChartTooltip,
+  ChartTooltipContent,
+} from '@/components/ui/chart';
 
 interface DashboardStats {
   totalPartners: number;
@@ -19,15 +32,6 @@ interface DashboardStats {
   totalPlans: number;
   totalLicenses: number;
   activeLicenses: number;
-}
-
-interface QuickActionItem {
-  title: string;
-  subtitle: string;
-  icon: any;
-  href: string;
-  color: string;
-  bg: string;
 }
 
 export default function PlatformDashboard() {
@@ -48,7 +52,6 @@ export default function PlatformDashboard() {
   const [username, setUsername] = useState('Admin Platform');
 
   useEffect(() => {
-    // Get username from localStorage
     const userStr = localStorage.getItem('user');
     if (userStr) {
       try {
@@ -73,7 +76,6 @@ export default function PlatformDashboard() {
         fetchWithAuth('/subscription-plan'),
       ]);
 
-      // Extract data safely
       const partners = partnersData.status === 'fulfilled' 
         ? (Array.isArray(partnersData.value) ? partnersData.value : [])
         : [];
@@ -86,11 +88,9 @@ export default function PlatformDashboard() {
         ? (Array.isArray(plansData.value) ? plansData.value : [])
         : [];
 
-      // Calculate stats
-      const activePartners = partners.filter((p: any) => p.status === 'Active').length;
-      const suspendedPartners = partners.filter((p: any) => p.status === 'Suspended').length;
+      const activePartners = partners.filter((p: any) => p.status === 'Aktif').length;
+      const suspendedPartners = partners.filter((p: any) => p.status === 'Ditangguhkan').length;
 
-      // Get all licenses from all partners
       let allLicenses: any[] = [];
       try {
         const licensePromises = partners.map((p: any) => 
@@ -102,7 +102,7 @@ export default function PlatformDashboard() {
         console.error('Error fetching licenses:', err);
       }
 
-      const activeLicenses = allLicenses.filter((l: any) => l.license_status === 'Active').length;
+      const activeLicenses = allLicenses.filter((l: any) => l.license_status === 'Aktif').length;
 
       setStats({
         totalPartners: partners.length,
@@ -127,54 +127,55 @@ export default function PlatformDashboard() {
   const formatRp = (val: number) => 
     'Rp ' + parseInt(val.toString() || '0').toLocaleString('id-ID');
 
-  const quickActions: QuickActionItem[] = [
+  // Chart Data
+  const chartData = [
     { 
-      title: 'Partner Management', 
-      subtitle: `${stats.totalPartners} Partners`, 
-      icon: Users, 
-      href: '/platform/partners', 
-      color: 'text-blue-600', 
-      bg: 'bg-blue-50' 
+      category: "Total Mitra", 
+      value: stats.totalPartners,
+      fill: "hsl(217, 91%, 60%)" // Blue
     },
     { 
-      title: 'Subscription Plans', 
-      subtitle: `${stats.totalPlans} Packages`, 
-      icon: Package, 
-      href: '/platform/subscription-plans', 
-      color: 'text-indigo-600', 
-      bg: 'bg-indigo-50' 
+        category: "Total Paket Langganan",        // DIUBAH dari "Total Langganan"
+        value: stats.totalPlans,        // DIUBAH dari stats.totalSubscriptions
+        fill: "hsl(45, 93%, 47%)"       // Tetap orange/amber
+    },
+
+    { 
+      category: "Langganan Aktif", 
+      value: stats.activeSubscriptions,
+      fill: "hsl(142, 71%, 45%)" // Green
     },
     { 
-      title: 'Partner Subscriptions', 
-      subtitle: `${stats.activeSubscriptions} Active`, 
-      icon: ShoppingBag, 
-      href: '/platform/subscriptions', 
-      color: 'text-orange-600', 
-      bg: 'bg-orange-50' 
+      category: "Lisensi Aktif", 
+      value: stats.activeLicenses,
+      fill: "hsl(262, 83%, 58%)" // Purple
     },
     { 
-      title: 'License Monitor', 
-      subtitle: `${stats.activeLicenses} Devices Online`, 
-      icon: Smartphone, 
-      href: '/platform/licenses', 
-      color: 'text-purple-600', 
-      bg: 'bg-purple-50' 
+      category: "Total Lisensi", 
+      value: stats.totalLicenses,
+      fill: "hsl(0, 65%, 60%)" // Pink
     },
   ];
 
+  const chartConfig = {
+    value: {
+      label: "Total",
+      color: "hsl(var(--chart-1))",
+    },
+  } satisfies ChartConfig;
+
   return (
-    <div className="animate-in fade-in duration-500 pb-10">
+    <div className="pb-10">
       
-      {/* HEADER */}
-      <div className="mb-10 flex flex-col md:flex-row md:items-end justify-between gap-4">
+      {/* HEADER - Padding konsisten */}
+      <div className="mb-8 flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Dashboard Overview</h1>
-          <p className="text-gray-500 mt-2 text-base">
-            Welcome back, <span className="font-bold text-gray-800">{username}</span>! Here's your platform summary.
+          <p className="text-gray-600 text-base">
+            Selamat Datang, <span className="font-bold text-gray-900">{username}</span>! Selamat dan Semangat Bekerja.
           </p>
         </div>
         <div className="flex items-center gap-2 bg-white px-4 py-2 rounded-xl border border-gray-200 shadow-sm text-sm font-medium text-gray-600">
-          <Calendar size={18} className="text-blue-600"/>
+          <Calendar size={18} className="text-gray-600"/>
           {new Date().toLocaleDateString('id-ID', { 
             weekday: 'long', 
             year: 'numeric', 
@@ -199,134 +200,76 @@ export default function PlatformDashboard() {
             </div>
           )}
 
-          {/* KEY METRICS */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-12">
+          {/* BAR CHART - Platform Statistics dengan padding konsisten */}
+          <Card className="border-2 shadow-sm">
+            {/* Header dengan padding konsisten: p-6 */}
+            <CardHeader className="p-6 pt-0 pb-0">
+              <CardTitle className="text-2xl font-bold text-gray-900">Statistik Platform</CardTitle>
+              {/* <CardDescription className="text-base text-gray-600 mt-2">
+                Gambaran dari partners, subscriptions, dan licenses
+              </CardDescription> */}
+            </CardHeader>
             
-            {/* MAIN CARD: TOTAL REVENUE */}
-            <div className="lg:col-span-2 bg-gradient-to-r from-blue-600 to-blue-800 p-8 rounded-2xl text-white shadow-xl shadow-blue-200 relative overflow-hidden group transition-transform hover:scale-[1.01]">
-              <div className="absolute -right-10 -top-10 w-40 h-40 bg-white/10 rounded-full blur-2xl group-hover:bg-white/20 transition-all duration-500"></div>
-              
-              <div className="relative z-10 flex flex-col justify-between h-full">
-                <div className="flex justify-between items-start mb-6">
-                  <div className="p-3 bg-white/20 backdrop-blur-md rounded-xl">
-                    <DollarSign size={32} className="text-white" />
-                  </div>
-                  <span className="bg-blue-500/50 border border-blue-400/30 px-3 py-1 rounded-full text-xs font-bold tracking-wider">
-                    TOTAL REVENUE
-                  </span>
-                </div>
-                <div>
-                  <h3 className="text-5xl font-bold tracking-tight mb-2">
-                    {formatRp(stats.totalRevenue)}
-                  </h3>
-                  <p className="text-blue-100 text-lg">
-                    From <strong>{stats.totalSubscriptions}</strong> subscription transactions across all partners.
-                  </p>
-                </div>
+            {/* Content dengan padding konsisten: p-6 */}
+            <CardContent className="p-6 pt-0">
+              <ChartContainer config={chartConfig} className="h-[335px] w-full">
+                <BarChart
+                  accessibilityLayer
+                  data={chartData}
+                  margin={{
+                    top: 10,
+                    right: 30,
+                    left: 20,
+                    bottom: 20,
+                  }}
+                >
+                  <CartesianGrid vertical={false} strokeDasharray="3 3" />
+                  <XAxis
+                    dataKey="category"
+                    tickLine={false}
+                    tickMargin={15}
+                    axisLine={false}
+                    angle={0}
+                    textAnchor="middle"
+                    height={20}
+                    tick={{ fontSize: 13, fontWeight: 500 }}
+                  />
+                  <YAxis
+                    tickLine={false}
+                    axisLine={false}
+                    tick={{ fontSize: 12 }}
+                  />
+                  <ChartTooltip
+                    cursor={{ fill: 'rgba(59, 130, 246, 0.1)' }}
+                    content={<ChartTooltipContent hideLabel />}
+                  />
+                  <Bar 
+                    dataKey="value" 
+                    radius={[12, 12, 0, 0]}
+                  >
+                    <LabelList
+                      position="top"
+                      offset={12}
+                      className="fill-foreground"
+                      fontSize={14}
+                      fontWeight={700}
+                    />
+                  </Bar>
+                </BarChart>
+              </ChartContainer>
+            </CardContent>
+            
+            {/* Footer dengan padding konsisten: p-6 */}
+            <CardFooter className="p-6 pb-0 border-t flex-col items-start gap-3">
+              {/* <div className="flex gap-2 items-center leading-none font-bold text-base text-green-600">
+                <TrendingUp className="h-5 w-5" />
+                Platform berkembang dengan stabil
+              </div> */}
+              <div className="text-gray-600 leading-relaxed text-sm">
+                Data Real-time yang menunjukkan total Mitra, langganan aktif, dan perangkat lisensi di seluruh platform.
               </div>
-            </div>
-
-            {/* SECONDARY STATS */}
-            <div className="flex flex-col gap-6">
-              {/* Partners Card */}
-              <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm flex items-center gap-4 h-full hover:shadow-md transition-shadow">
-                <div className="p-4 bg-orange-50 text-orange-600 rounded-xl">
-                  <Users size={32} />
-                </div>
-                <div>
-                  <p className="text-gray-500 font-medium text-sm">Total Partners</p>
-                  <h3 className="text-3xl font-bold text-gray-900">{stats.totalPartners}</h3>
-                  <p className="text-xs text-green-600 font-semibold mt-1">
-                    {stats.activePartners} Active
-                  </p>
-                </div>
-              </div>
-
-              {/* Licenses Card */}
-              <div className="bg-white p-6 rounded-2xl border border-gray-200 shadow-sm flex items-center gap-4 h-full hover:shadow-md transition-shadow">
-                <div className="p-4 bg-purple-50 text-purple-600 rounded-xl">
-                  <Smartphone size={32} />
-                </div>
-                <div>
-                  <p className="text-gray-500 font-medium text-sm">Active Licenses</p>
-                  <div className="flex items-center gap-2">
-                    <h3 className="text-3xl font-bold text-gray-900">{stats.activeLicenses}</h3>
-                    <span className="text-xs font-bold text-green-600 bg-green-100 px-2 py-0.5 rounded-full">
-                      Online
-                    </span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* QUICK ACTIONS */}
-          <div>
-            <h2 className="text-2xl font-bold text-gray-900 mb-6">Quick Actions</h2>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 pb-12">
-              {quickActions.map((item, index) => (
-                <Link href={item.href} key={index} className="group block h-full">
-                  <div className="bg-white p-8 rounded-2xl border border-gray-200 shadow-sm hover:shadow-lg hover:border-blue-300 transition-all duration-300 h-full flex flex-col justify-between relative overflow-hidden">
-                    
-                    {/* Hover Effect */}
-                    <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-blue-400 to-purple-400 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
-
-                    <div className="flex justify-between items-start mb-6">
-                      <div className={`p-4 rounded-xl ${item.bg} ${item.color} group-hover:scale-110 transition-transform duration-300`}>
-                        <item.icon size={32} />
-                      </div>
-                      <div className="w-10 h-10 rounded-full bg-gray-50 flex items-center justify-center text-gray-400 group-hover:bg-blue-600 group-hover:text-white transition-colors">
-                        <ArrowRight size={20} />
-                      </div>
-                    </div>
-
-                    <div>
-                      <h3 className="text-xl font-bold text-gray-900 group-hover:text-blue-600 transition-colors">
-                        {item.title}
-                      </h3>
-                      <p className="text-gray-500 font-medium mt-2">{item.subtitle}</p>
-                    </div>
-                  </div>
-                </Link>
-              ))}
-            </div>
-          </div>
-
-          {/* ADDITIONAL STATS SECTION */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-8">
-            <div className="bg-gradient-to-br from-green-50 to-emerald-50 p-6 rounded-2xl border border-green-200">
-              <div className="flex items-center justify-between mb-4">
-                <div className="p-3 bg-green-100 rounded-xl">
-                  <BarChart3 size={24} className="text-green-600" />
-                </div>
-                <span className="text-sm font-bold text-green-600">Active</span>
-              </div>
-              <h4 className="text-2xl font-bold text-gray-900">{stats.activeSubscriptions}</h4>
-              <p className="text-sm text-gray-600 mt-1">Active Subscriptions</p>
-            </div>
-
-            <div className="bg-gradient-to-br from-blue-50 to-indigo-50 p-6 rounded-2xl border border-blue-200">
-              <div className="flex items-center justify-between mb-4">
-                <div className="p-3 bg-blue-100 rounded-xl">
-                  <Package size={24} className="text-blue-600" />
-                </div>
-                <span className="text-sm font-bold text-blue-600">Available</span>
-              </div>
-              <h4 className="text-2xl font-bold text-gray-900">{stats.totalPlans}</h4>
-              <p className="text-sm text-gray-600 mt-1">Subscription Plans</p>
-            </div>
-
-            <div className="bg-gradient-to-br from-purple-50 to-pink-50 p-6 rounded-2xl border border-purple-200">
-              <div className="flex items-center justify-between mb-4">
-                <div className="p-3 bg-purple-100 rounded-xl">
-                  <Smartphone size={24} className="text-purple-600" />
-                </div>
-                <span className="text-sm font-bold text-purple-600">Total</span>
-              </div>
-              <h4 className="text-2xl font-bold text-gray-900">{stats.totalLicenses}</h4>
-              <p className="text-sm text-gray-600 mt-1">Total Licenses</p>
-            </div>
-          </div>
+            </CardFooter>
+          </Card>
 
         </>
       )}

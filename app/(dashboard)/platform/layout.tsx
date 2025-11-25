@@ -87,7 +87,7 @@ export default function PlatformLayout({
       <Sidebar
         menuItems={menuItems}
         title="Horeka POS+"
-        subtitle="Platform Admin"
+        subtitle="Admin Platform"
         logoSrc="/images/LOGO HOREKA (1).png" // Ganti dengan path logo Anda
         onLogout={logout}
       />

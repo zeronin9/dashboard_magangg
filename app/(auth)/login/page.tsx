@@ -35,7 +35,7 @@ export default function LoginPage() {
     <div className="min-h-screen flex items-center justify-center bg-gray-100 p-4 font-sans">
       
       {/* CARD WRAPPER */}
-      <div className="w-full max-w-5xl bg-white rounded-[2rem] shadow-2xl overflow-hidden flex flex-col md:flex-row min-h-[600px]">
+      <div className="w-full max-w-5xl bg-white rounded-xl shadow-sm overflow-hidden flex flex-col md:flex-row min-h-[600px]">
         
         {/* BAGIAN KIRI: FORM LOGIN */}
         <div className="w-full md:w-1/2 p-8 md:p-16 flex flex-col justify-center bg-white relative">
@@ -44,7 +44,7 @@ export default function LoginPage() {
           <div className="flex items-center gap-3 mb-10">
             <div className="relative w-10 h-10 flex-shrink-0">
               <Image 
-                src="/images/logo.png" 
+                src="/images/LOGO HOREKA (1).png" 
                 alt="Horeka Logo" 
                 fill
                 className="object-contain"
@@ -55,11 +55,11 @@ export default function LoginPage() {
                   target.style.display = 'none';
                 }}
               />
-              <div className="w-10 h-10 bg-indigo-600 rounded-lg flex items-center justify-center">
+              {/* <div className="w-10 h-10 bg-indigo-600 rounded-lg flex items-center justify-center">
                 <span className="text-white text-xl font-bold">H</span>
-              </div>
+              </div> */}
             </div>
-            <span className="text-xl font-bold text-blue-800 tracking-wide">Horeka POS+</span>
+            <span className="text-xl font-bold text-black tracking-wide">Horeka POS+</span>
           </div>
 
           <div className="mb-8">
@@ -126,7 +126,7 @@ export default function LoginPage() {
           {/* Helper Text */}
           <div className="mt-8 text-center">
             <p className="text-sm text-gray-500">
-              Platform Admin Login
+              
             </p>
           </div>
         </div>
